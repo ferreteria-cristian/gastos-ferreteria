@@ -125,7 +125,7 @@
   .locked-text { color: #888; font-size: 14px; }
 </style>
 </head>
-<body onclick="if(document.activeElement && document.activeElement.tagName==='INPUT'){document.activeElement.blur();}">
+<body onclick="var t=event.target; if(t.tagName!=='INPUT'&&t.tagName!=='SELECT'&&t.tagName!=='TEXTAREA'&&t.tagName!=='BUTTON'&&document.activeElement&&document.activeElement.tagName==='INPUT'){document.activeElement.blur();}">
 <div id="root"></div>
 
 <div class="overlay" id="modal-del" style="display:none" onclick="closeModal('modal-del')">
@@ -463,7 +463,11 @@ function renderNuevo(el) {
   setTimeout(()=>{ const d=document.getElementById('f-desc'); if(d) d.focus(); },100);
 }
 
-window.selectCat = function(id) { state.form.categoria=id; renderContent(); };
+window.selectCat = function(id) { 
+  state.form.categoria=id; 
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+};
 
 window.addGasto = async function() {
   const descripcion = (document.getElementById('f-desc')?.value || '').trim();
