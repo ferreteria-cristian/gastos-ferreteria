@@ -125,8 +125,8 @@
   .locked-text { color: #888; font-size: 14px; }
 </style>
 </head>
-<body onclick="var t=event.target; if(t.tagName!=='INPUT'&&t.tagName!=='SELECT'&&t.tagName!=='TEXTAREA'&&t.tagName!=='BUTTON'&&document.activeElement&&document.activeElement.tagName==='INPUT'){document.activeElement.blur();}">
-<div id="root"></div>
+<body>
+ <div id="root"></div>
 
 <div class="overlay" id="modal-del" style="display:none" onclick="closeModal('modal-del')">
   <div class="modal" onclick="event.stopPropagation()">
