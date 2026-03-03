@@ -627,15 +627,17 @@ window.exportCSV = function() {
   showToast('CSV descargado 📥');
 };
 
-// Format monto input
+// Format monto input - iOS compatible
 window.formatMonto = function(el) {
-  const raw = el.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+  const raw = el.value.replace(/[^0-9]/g, '');
   state.form.monto = raw;
-  if(raw) el.value = Number(raw).toLocaleString('es-CO');
-  else el.value = '';
-  // keep cursor at end
-  const len = el.value.length;
-  el.setSelectionRange(len, len);
+  if(raw) {
+    const num = parseInt(raw, 10);
+    const formatted = num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    el.value = formatted;
+  } else {
+    el.value = '';
+  }
 };
 
 // INIT
