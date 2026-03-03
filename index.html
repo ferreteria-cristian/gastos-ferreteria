@@ -125,7 +125,7 @@
   .locked-text { color: #888; font-size: 14px; }
 </style>
 </head>
-<body>
+<body onclick="if(document.activeElement && document.activeElement.tagName==='INPUT'){document.activeElement.blur();}">
 <div id="root"></div>
 
 <div class="overlay" id="modal-del" style="display:none" onclick="closeModal('modal-del')">
@@ -453,7 +453,7 @@ function renderNuevo(el) {
     <label>Persona / Proveedor</label>
     <input id="f-persona" placeholder="Nombre (opcional)" value="${esc(state.form.persona)}" />
     <label>Monto (COP) *</label>
-    <input id="f-monto" class="input-monto" type="number" placeholder="0" inputmode="numeric" value="${state.form.monto}" />
+    <input id="f-monto" class="input-monto" type="text" placeholder="0" inputmode="numeric" value="${state.form.monto?Number(state.form.monto).toLocaleString('es-CO'):''}" oninput="formatMonto(this)" />
     ${isAdmin?`<label>Registrado por</label><select id="f-user">${userOpts}</select>`:''}
     <label>Fecha</label>
     <input id="f-fecha" type="date" value="${state.form.fecha}" />
@@ -468,7 +468,7 @@ window.selectCat = function(id) { state.form.categoria=id; renderContent(); };
 window.addGasto = async function() {
   const descripcion = (document.getElementById('f-desc')?.value || '').trim();
   const persona = (document.getElementById('f-persona')?.value || '').trim();
-  const montoRaw = document.getElementById('f-monto')?.value || state.form.monto;
+  const montoRaw = state.form.monto || (document.getElementById('f-monto')?.value || '').replace(/\./g,'');
   const fechaVal = document.getElementById('f-fecha')?.value || state.form.fecha;
   const registradoPorVal = document.getElementById('f-user')?.value || (state.session?.isAdmin ? state.form.registradoPor : state.session?.nombre);
   
@@ -625,6 +625,17 @@ window.exportCSV = function() {
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
   a.download='gastos-ferreteria-'+todayStr()+'.csv'; a.click();
   showToast('CSV descargado 📥');
+};
+
+// Format monto input
+window.formatMonto = function(el) {
+  const raw = el.value.replace(/\./g, '').replace(/[^0-9]/g, '');
+  state.form.monto = raw;
+  if(raw) el.value = Number(raw).toLocaleString('es-CO');
+  else el.value = '';
+  // keep cursor at end
+  const len = el.value.length;
+  el.setSelectionRange(len, len);
 };
 
 // INIT
