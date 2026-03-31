@@ -241,7 +241,10 @@ async function loadData(silent=false) {
       };
     });
     setHeaderSub('Sincronizado ✓');
-  } catch(e) { setHeaderSub('Error: ' + e.message); }
+  } catch(e) { 
+    setHeaderSub('Error: ' + e.message);
+    showToast('Error cargando datos: ' + e.message, 'error');
+  }
   if(!silent) render();
   else renderContent();
 }
