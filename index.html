@@ -489,32 +489,30 @@ function renderHistorial(el) {
   el.innerHTML=html;
 }
 
-// ── RESUMEN CON FILTROS ───────────────────────────
-function getFiltroDates(periodo) {
+function getFiltroDates(p) {
   const d = new Date();
   const pad = n => String(n).padStart(2,'0');
   const str = dd => dd.getFullYear()+'-'+pad(dd.getMonth()+1)+'-'+pad(dd.getDate());
-  if(periodo === 'semana') {
-    const day = d.getDay()||7;
-    const mon = new Date(d); mon.setDate(d.getDate()-day+1);
-    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
-    return { desde: str(mon), hasta: str(sun), label: str(mon)+' al '+str(sun) };
+  if(p==='semana') {
+    const day=d.getDay()||7;
+    const mon=new Date(d); mon.setDate(d.getDate()-day+1);
+    const sun=new Date(mon); sun.setDate(mon.getDate()+6);
+    return {desde:str(mon), hasta:str(sun), label:str(mon)+' al '+str(sun)};
   }
-  if(periodo === 'mes') {
-    const desde = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-01';
-    const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
-    return { desde, hasta: str(last), label: d.toLocaleDateString('es-CO',{month:'long',year:'numeric'}) };
+  if(p==='mes') {
+    const desde=d.getFullYear()+'-'+pad(d.getMonth()+1)+'-01';
+    const last=new Date(d.getFullYear(),d.getMonth()+1,0);
+    return {desde, hasta:str(last), label:d.toLocaleDateString('es-CO',{month:'long',year:'numeric'})};
   }
   // historico
-  const sorted = state.gastos.map(g=>g.fecha).sort();
-  const desde = sorted[0]||str(d), hasta = sorted[sorted.length-1]||str(d);
-  return { desde, hasta, label: 'Todo el histórico' };
+  const fechas=state.gastos.map(g=>g.fecha).sort();
+  return {desde:fechas[0]||str(d), hasta:fechas[fechas.length-1]||str(d), label:'Todo el histórico'};
 }
 
 function renderResumen(el) {
   if(!state.session?.isAdmin){el.innerHTML=`<div class="locked-banner"><div class="locked-icon">🔒</div><div class="locked-text">Solo para administradores</div></div>`;return;}
 
-  const p = state.resumenPeriodo;
+  const p = state.resumenPeriodo||'historico';
   const {desde, hasta, label} = getFiltroDates(p);
   const lista = state.gastos.filter(g=>g.fecha>=desde && g.fecha<=hasta);
   const total = lista.reduce((s,g)=>s+g.monto,0);
@@ -525,8 +523,8 @@ function renderResumen(el) {
     if(g.registradoPor) byUser[g.registradoPor]=(byUser[g.registradoPor]||0)+g.monto;
   });
 
-  const tabs = [['semana','Semana'],['mes','Mes'],['historico','Histórico']];
-  let html = `<div class="period-tabs">
+  const tabs=[['semana','Semana'],['mes','Mes'],['historico','Histórico']];
+  let html=`<div class="period-tabs">
     ${tabs.map(([k,l])=>`<button class="period-btn ${p===k?'active':''}" onclick="setPeriodo('${k}')">${l}</button>`).join('')}
   </div>
   <div class="summary-card">
@@ -536,9 +534,9 @@ function renderResumen(el) {
   </div>`;
 
   if(!lista.length) {
-    html += `<div class="empty"><div class="empty-icon">📭</div><div>Sin gastos en este período</div></div>`;
+    html+=`<div class="empty"><div class="empty-icon">📭</div><div>Sin gastos en este período</div></div>`;
   } else {
-    html += `<div class="section-title">Por categoría</div>`;
+    html+=`<div class="section-title">Por categoría</div>`;
     CATS.filter(c=>byCat[c.id]).sort((a,b)=>(byCat[b.id]||0)-(byCat[a.id]||0)).forEach(c=>{
       const val=byCat[c.id]||0, pct=total?(val/total*100):0;
       html+=`<div class="cat-row">
@@ -547,29 +545,21 @@ function renderResumen(el) {
         <div class="cat-row-val">${fmt(val)}</div>
       </div>`;
     });
-
-    if(Object.keys(byUser).length) {
-      html += `<div class="section-title">Por usuario</div>`;
-      Object.entries(byUser).sort((a,b)=>b[1]-a[1]).forEach(([u,v])=>{
-        const pct=total?(v/total*100):0;
-        html+=`<div class="cat-row">
-          <div class="cat-row-left"><span>👤</span><span class="cat-row-label">${esc(u)}</span></div>
-          <div class="cat-row-bar"><div class="cat-bar-fill" style="width:${pct}%;background:#E84B1A"></div></div>
-          <div class="cat-row-val">${fmt(v)}</div>
-        </div>`;
-      });
-    }
+    html+=`<div class="section-title">Por usuario</div>`;
+    Object.entries(byUser).sort((a,b)=>b[1]-a[1]).forEach(([u,v])=>{
+      const pct=total?(v/total*100):0;
+      html+=`<div class="cat-row">
+        <div class="cat-row-left"><span>👤</span><span class="cat-row-label">${esc(u)}</span></div>
+        <div class="cat-row-bar"><div class="cat-bar-fill" style="width:${pct}%;background:#E84B1A"></div></div>
+        <div class="cat-row-val">${fmt(v)}</div>
+      </div>`;
+    });
   }
 
-  const totalAll=state.gastos.reduce((s,g)=>s+g.monto,0);
-  html+=`<div class="summary-card2"><div class="summary-title">Total histórico</div><div class="summary-total">${fmt(totalAll)}</div><div class="summary-sub">${state.gastos.length} gastos en total</div></div>`;
   el.innerHTML=html;
 }
 
-window.setPeriodo = function(p) {
-  state.resumenPeriodo=p;
-  renderContent();
-};
+window.setPeriodo = function(p) { state.resumenPeriodo=p; renderContent(); };
 
 window.askDelete = function(idx) {
   try {
