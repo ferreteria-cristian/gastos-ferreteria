@@ -225,7 +225,7 @@ function clearSession() { state.session=null; sessionStorage.removeItem('fc-sess
 async function loadData(silent=false) {
   if(!silent) setHeaderSub('Sincronizando...');
   try {
-    const q = query(collection(db, COLECCION), orderBy('fecha', 'desc'), orderBy('timestamp', 'desc'));
+    const q = query(collection(db, COLECCION), orderBy('fecha', 'desc'));
     const snap = await getDocs(q);
     state.gastos = snap.docs.map(d => {
       const data = d.data() || {};
