@@ -14,7 +14,7 @@
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   :root {
     --bg: #FAF3E8; --dark: #1E2D4A; --dark2: #162238;
-    --gold: #E84B1A; --red: #E84B1A; --green: #2D7D46;
+    --gold: #E84B1A; --red: #E84B1A;
     --text: #1A1208; --sub: #888; --border: #E8DDD0; --card: #FFFFFF;
     --radius: 14px;
   }
@@ -106,6 +106,11 @@
   .cat-bar-fill { height: 100%; border-radius: 4px; }
   .cat-row-val { font-size: 11px; font-weight: 700; color: #333; width: 80px; text-align: right; flex-shrink: 0; }
 
+  /* Period tabs */
+  .period-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
+  .period-btn { flex: 1; padding: 10px 0; border-radius: 22px; border: 1.5px solid var(--border); background: #fff; font-family: inherit; font-size: 12px; font-weight: 700; color: #888; cursor: pointer; }
+  .period-btn.active { background: var(--dark); color: var(--gold); border-color: var(--dark); }
+
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 999; display: flex; align-items: center; justify-content: center; padding: 20px; }
   .modal { background: #fff; border-radius: 18px; padding: 26px; width: 100%; max-width: 340px; box-shadow: 0 12px 50px rgba(0,0,0,0.4); max-height: 90vh; overflow-y: auto; }
   .modal-title { font-family: 'Playfair Display', serif; font-size: 18px; margin-bottom: 14px; }
@@ -126,7 +131,7 @@
 </style>
 </head>
 <body>
- <div id="root"></div>
+<div id="root"></div>
 
 <div class="overlay" id="modal-del" style="display:none" onclick="closeModal('modal-del')">
   <div class="modal" onclick="event.stopPropagation()">
@@ -145,7 +150,7 @@
     <label>Descripción</label><input id="edit-desc" type="text" />
     <label>Persona / Proveedor</label><input id="edit-persona" type="text" />
     <label>Categoría</label><select id="edit-cat"></select>
-    <label>Monto (COP)</label><input id="edit-monto" type="number" inputmode="numeric" />
+    <label>Monto (COP)</label><input id="edit-monto" type="text" inputmode="numeric" oninput="fmtEditMonto(this)" />
     <label>Registrado por</label><select id="edit-user"></select>
     <label>Fecha</label><input id="edit-fecha" type="date" />
     <div class="modal-btns">
@@ -157,20 +162,15 @@
 
 <div class="toast" id="toast" style="display:none"></div>
 
-<!-- Firebase SDK -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script>
-// Firebase compat API (global scope, no modules)
 const initializeApp = (config) => firebase.initializeApp(config);
 const getFirestore = (app) => firebase.firestore();
 const collection = (db, name) => db.collection(name);
 const addDoc = (colRef, data) => colRef.add(data).then(ref => ref);
 const getDocs = (q) => q.get();
-const doc = (db, colName, id) => { 
-  if(!id) throw new Error('ID vacío en doc()'); 
-  return db.collection(colName).doc(String(id)); 
-};
+const doc = (db, colName, id) => { if(!id) throw new Error('ID vacío'); return db.collection(colName).doc(String(id)); };
 const updateDoc = (docRef, data) => docRef.update(data);
 const deleteDoc = (docRef) => docRef.delete();
 const query = (colRef, ...constraints) => { let q = colRef; constraints.forEach(c => { q = c(q); }); return q; };
@@ -188,8 +188,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const COLECCION = 'gastos';
-
 const ADMIN_PASS = '0452Rocio.';
+
 const CATS = [
   { id:'transporte',  label:'Transporte',  icon:'🚛', color:'#E8A838' },
   { id:'combustible', label:'Combustible', icon:'⛽', color:'#E85438' },
@@ -204,36 +204,28 @@ const USUARIOS = ['Paola', 'Lisbeth', 'Cristian', 'Rocío'];
 
 window.fmt = n => new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0}).format(Number(n)||0);
 const fmt = window.fmt;
-const todayStr = () => {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const day = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-};
+const todayStr = () => { const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
 const esc = s => { try { return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); } catch(e) { return ''; } };
 const cat = id => CATS.find(c=>c.id===id)||CATS[7];
 
-window.state = null; // will be set below
 let state = {
   session: JSON.parse(sessionStorage.getItem('fc-session')||'null'),
   gastos: [],
   view: 'home',
   filterDate: todayStr(),
+  resumenPeriodo: 'semana',
   form: { descripcion:'', monto:'', categoria:'transporte', persona:'', registradoPor: localStorage.getItem('fc-usuario')||'Cristian', fecha: todayStr() },
   deleteId: null,
   editId: null,
 };
-window.state = state;
 
 function saveSession(s) { state.session=s; sessionStorage.setItem('fc-session', JSON.stringify(s)); }
 function clearSession() { state.session=null; sessionStorage.removeItem('fc-session'); }
 
-// ── FIREBASE CRUD ─────────────────────────────────
 async function loadData(silent=false) {
   if(!silent) setHeaderSub('Sincronizando...');
   try {
-    const q = query(collection(db, COLECCION), orderBy('fecha', 'desc'));
+    const q = query(collection(db, COLECCION), orderBy('fecha', 'desc'), orderBy('timestamp', 'desc'));
     const snap = await getDocs(q);
     state.gastos = snap.docs.map(d => {
       const data = d.data() || {};
@@ -249,31 +241,24 @@ async function loadData(silent=false) {
       };
     });
     setHeaderSub('Sincronizado ✓');
-  } catch(e) {
-    setHeaderSub('Error: ' + e.message);
-  }
-  render();
+  } catch(e) { setHeaderSub('Error: ' + e.message); }
+  if(!silent) render();
+  else renderContent();
 }
 
 async function agregarGasto(data) {
-  const ref = await addDoc(collection(db, COLECCION), {
-    ...data,
-    timestamp: new Date().toISOString()
-  });
+  const ref = await addDoc(collection(db, COLECCION), { ...data, timestamp: new Date().toISOString() });
   return ref.id;
 }
-
 async function editarGasto(id, data) {
   if(!id) throw new Error('ID vacío al editar');
   await db.collection(COLECCION).doc(String(id)).update(data);
 }
-
 async function eliminarGasto(id) {
   if(!id) throw new Error('ID vacío al eliminar');
   await db.collection(COLECCION).doc(String(id)).delete();
 }
 
-// ── TOAST ─────────────────────────────────────────
 let toastTimer;
 function showToast(msg, type='ok') {
   const t=document.getElementById('toast'); if(!t) return;
@@ -282,10 +267,8 @@ function showToast(msg, type='ok') {
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.style.display='none',300); },2500);
 }
-
 function setHeaderSub(t) { const e=document.getElementById('header-sub'); if(e) e.textContent=t; }
 
-// ── RENDER ────────────────────────────────────────
 function render() {
   const root=document.getElementById('root');
   if(!state.session) { renderLogin(root); return; }
@@ -319,11 +302,9 @@ function renderLogin(root) {
 }
 
 window.toggleAdminField = function() {
-  const f=document.getElementById('admin-field');
-  const h=document.getElementById('admin-hint');
-  const visible = f.style.display!=='none';
-  f.style.display = visible?'none':'block';
-  h.style.display = visible?'block':'none';
+  const f=document.getElementById('admin-field'), h=document.getElementById('admin-hint');
+  const visible=f.style.display!=='none';
+  f.style.display=visible?'none':'block'; h.style.display=visible?'block':'none';
   if(!visible) setTimeout(()=>document.getElementById('login-pass')?.focus(),100);
 };
 
@@ -334,32 +315,20 @@ window.doLogin = function() {
   const adminVisible=passField.style.display!=='none';
   if(adminVisible && pass) {
     if(pass===ADMIN_PASS) {
-      saveSession({nombre,isAdmin:true});
-      localStorage.setItem('fc-usuario',nombre);
-      state.form.registradoPor=nombre;
-      renderApp(document.getElementById('root'));
-      loadData();
-    } else {
-      document.getElementById('login-error').textContent='Clave incorrecta';
-    }
+      saveSession({nombre,isAdmin:true}); localStorage.setItem('fc-usuario',nombre);
+      state.form.registradoPor=nombre; renderApp(document.getElementById('root')); loadData();
+    } else { document.getElementById('login-error').textContent='Clave incorrecta'; }
   } else {
-    saveSession({nombre,isAdmin:false});
-    localStorage.setItem('fc-usuario',nombre);
-    state.form.registradoPor=nombre;
-    renderApp(document.getElementById('root'));
-    loadData();
+    saveSession({nombre,isAdmin:false}); localStorage.setItem('fc-usuario',nombre);
+    state.form.registradoPor=nombre; renderApp(document.getElementById('root')); loadData();
   }
 };
 
 function renderApp(root) {
-  const {session} = state;
-  const isAdmin = session?.isAdmin;
-  const navTabs = isAdmin
-    ? [['home','📊 Hoy'],['historial','📋 Historial'],['resumen','📈 Resumen']]
-    : [['home','📊 Mis gastos']];
-  const navHTML = navTabs.map(([k,l])=>`<button class="nav-btn ${state.view===k?'active':''}" id="nav-${k}" onclick="showView('${k}')">${l}</button>`).join('');
-
-  root.innerHTML = `
+  const {session}=state, isAdmin=session?.isAdmin;
+  const navTabs=isAdmin?[['home','📊 Hoy'],['historial','📋 Historial'],['resumen','📈 Resumen']]:[['home','📊 Mis gastos']];
+  const navHTML=navTabs.map(([k,l])=>`<button class="nav-btn ${state.view===k?'active':''}" id="nav-${k}" onclick="showView('${k}')">${l}</button>`).join('');
+  root.innerHTML=`
     <div id="app">
       <div class="header">
         <div style="display:flex;align-items:center;gap:10px">
@@ -417,13 +386,13 @@ function renderHome(el) {
       <div class="total-count">${list.length} ${list.length===1?'gasto':'gastos'} · ${dateLabel}</div>
     </div>`;
   if(!list.length) html+=`<div class="empty"><div class="empty-icon">📭</div><div>Sin gastos para este día</div><button class="empty-btn" onclick="showView('nuevo')">Registrar gasto</button></div>`;
-  else html+=`<div class="list">${list.map(g=>cardHTML(g, isAdmin||(g.registradoPor===nombre), isAdmin)).join('')}</div>`;
+  else html+=`<div class="list">${list.map(g=>cardHTML(g,isAdmin||(g.registradoPor===nombre),isAdmin)).join('')}</div>`;
   el.innerHTML=html;
 }
 
 function cardHTML(g, canEdit=false, canDelete=false) {
   const c=cat(g.categoria);
-  const idx = state.gastos.findIndex(x=>x.id===g.id);
+  const idx=state.gastos.findIndex(x=>x.id===g.id);
   return `<div class="card">
     <div class="card-icon" style="background:${c.color}22;color:${c.color}">${c.icon}</div>
     <div class="card-info">
@@ -442,16 +411,16 @@ function cardHTML(g, canEdit=false, canDelete=false) {
 
 function renderNuevo(el) {
   const isAdmin=state.session?.isAdmin;
-  const catBtns=CATS.map(c=>`<button class="cat-btn ${state.form.categoria===c.id?'selected':''}" onclick="selectCat('${c.id}')"><div class="cat-btn-icon">${c.icon}</div><div class="cat-btn-label">${c.label}</div></button>`).join('');
+  const catBtns=CATS.map(c=>`<button class="cat-btn ${state.form.categoria===c.id?'selected':''}" onclick="selectCat('${c.id}',this)"><div class="cat-btn-icon">${c.icon}</div><div class="cat-btn-label">${c.label}</div></button>`).join('');
   const userOpts=USUARIOS.map(u=>`<option value="${u}" ${state.form.registradoPor===u?'selected':''}>${u}</option>`).join('');
   el.innerHTML=`<div class="form">
     <div class="form-title">Nuevo Gasto</div>
     <label>Categoría</label>
     <div class="cat-grid">${catBtns}</div>
     <label>Descripción *</label>
-    <input id="f-desc" placeholder="Ej: Transporte Jorge Saldarriaga" value="${esc(state.form.descripcion)}" />
+    <input id="f-desc" placeholder="Ej: Transporte Jorge Saldarriaga" value="${esc(state.form.descripcion)}" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
     <label>Persona / Proveedor</label>
-    <input id="f-persona" placeholder="Nombre (opcional)" value="${esc(state.form.persona)}" />
+    <input id="f-persona" placeholder="Nombre (opcional)" value="${esc(state.form.persona)}" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false" />
     <label>Monto (COP) *</label>
     <input id="f-monto" class="input-monto" type="text" placeholder="0" inputmode="numeric" value="${state.form.monto?Number(state.form.monto).toLocaleString('es-CO'):''}" oninput="formatMonto(this)" />
     ${isAdmin?`<label>Registrado por</label><select id="f-user">${userOpts}</select>`:''}
@@ -460,43 +429,41 @@ function renderNuevo(el) {
     <button class="btn-save" id="btn-guardar" onclick="addGasto()">💾 GUARDAR GASTO</button>
     <button class="btn-cancel" onclick="showView('home')">Cancelar</button>
   </div>`;
-  setTimeout(()=>{ const d=document.getElementById('f-desc'); if(d) d.focus(); },100);
 }
 
-window.selectCat = function(id) { 
-  state.form.categoria=id; 
-  document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+window.selectCat = function(id, btn) {
+  state.form.categoria=id;
+  document.querySelectorAll('.cat-btn').forEach(b=>b.classList.remove('selected'));
+  if(btn) btn.classList.add('selected');
 };
 
 window.addGasto = async function() {
-  const descripcion = (document.getElementById('f-desc')?.value || '').trim();
-  const persona = (document.getElementById('f-persona')?.value || '').trim();
-  const montoRaw = state.form.monto || (document.getElementById('f-monto')?.value || '').replace(/\./g,'');
-  const fechaVal = document.getElementById('f-fecha')?.value || state.form.fecha;
-  const registradoPorVal = document.getElementById('f-user')?.value || (state.session?.isAdmin ? state.form.registradoPor : state.session?.nombre);
-  
+  const descripcion=(document.getElementById('f-desc')?.value||'').trim();
+  const persona=(document.getElementById('f-persona')?.value||'').trim();
+  const montoRaw=state.form.monto||(document.getElementById('f-monto')?.value||'').replace(/\./g,'');
+  const fechaVal=document.getElementById('f-fecha')?.value||state.form.fecha;
+  const registradoPorVal=document.getElementById('f-user')?.value||(state.session?.isAdmin?state.form.registradoPor:state.session?.nombre);
   if(!descripcion) return showToast('Escribe una descripción','error');
   const monto=parseFloat(String(montoRaw).replace(/\./g,'').replace(',','.'));
   if(isNaN(monto)||monto<=0) return showToast('Ingresa un monto válido','error');
   const btn=document.getElementById('btn-guardar');
-  if(btn){ btn.textContent='Guardando...'; btn.disabled=true; }
+  if(btn){btn.textContent='Guardando...';btn.disabled=true;}
   try {
-    await agregarGasto({ fecha:fechaVal, descripcion, persona, categoria:state.form.categoria, monto, registradoPor:registradoPorVal });
+    await agregarGasto({fecha:fechaVal,descripcion,persona,categoria:state.form.categoria,monto,registradoPor:registradoPorVal});
     const savedDate=fechaVal;
-    state.form={ descripcion:'', monto:'', categoria:'transporte', persona:'', registradoPor:registradoPorVal, fecha:todayStr() };
+    state.form={descripcion:'',monto:'',categoria:'transporte',persona:'',registradoPor:registradoPorVal,fecha:todayStr()};
     state.filterDate=savedDate;
     showToast('Gasto registrado ✓');
     showView('home');
     await loadData(true);
   } catch(e) {
     showToast('Error: '+e.message,'error');
-    if(btn){ btn.textContent='💾 GUARDAR GASTO'; btn.disabled=false; }
+    if(btn){btn.textContent='💾 GUARDAR GASTO';btn.disabled=false;}
   }
 };
 
 function renderHistorial(el) {
-  if(!state.session?.isAdmin){ el.innerHTML=`<div class="locked-banner"><div class="locked-icon">🔒</div><div class="locked-text">Solo para administradores</div></div>`; return; }
+  if(!state.session?.isAdmin){el.innerHTML=`<div class="locked-banner"><div class="locked-icon">🔒</div><div class="locked-text">Solo para administradores</div></div>`;return;}
   const total=state.gastos.reduce((s,g)=>s+g.monto,0);
   let html=`<div class="hist-header">
     <div><div class="hist-total-label">Total acumulado</div><div class="hist-total-value">${fmt(total)}</div></div>
@@ -508,7 +475,7 @@ function renderHistorial(el) {
   if(!state.gastos.length) html+=`<div class="empty"><div class="empty-icon">📭</div><div>Sin gastos registrados</div></div>`;
   else {
     const byDate={};
-    state.gastos.forEach(g=>{ (byDate[g.fecha]=byDate[g.fecha]||[]).push(g); });
+    state.gastos.forEach(g=>{(byDate[g.fecha]=byDate[g.fecha]||[]).push(g);});
     const dates=Object.keys(byDate).sort((a,b)=>b.localeCompare(a));
     html+=`<div class="list">`;
     dates.forEach(d=>{
@@ -522,63 +489,109 @@ function renderHistorial(el) {
   el.innerHTML=html;
 }
 
-function renderResumen(el) {
-  if(!state.session?.isAdmin){ el.innerHTML=`<div class="locked-banner"><div class="locked-icon">🔒</div><div class="locked-text">Solo para administradores</div></div>`; return; }
-  const d=new Date(), day=d.getDay()||7;
-  const mon=new Date(d); mon.setDate(d.getDate()-day+1);
-  const sun=new Date(mon); sun.setDate(mon.getDate()+6);
-  const f2=dd=>dd.toISOString().split('T')[0];
-  const week=state.gastos.filter(g=>g.fecha>=f2(mon)&&g.fecha<=f2(sun));
-  const weekTotal=week.reduce((s,g)=>s+g.monto,0);
-  const byCat={},byUser={};
-  week.forEach(g=>{ byCat[g.categoria]=(byCat[g.categoria]||0)+g.monto; if(g.registradoPor) byUser[g.registradoPor]=(byUser[g.registradoPor]||0)+g.monto; });
-  const totalAll=state.gastos.reduce((s,g)=>s+g.monto,0);
-  let html=`<div class="summary-card">
-    <div class="summary-title">Esta semana</div>
-    <div class="summary-total">${fmt(weekTotal)}</div>
-    <div class="summary-sub">${week.length} gastos · ${f2(mon)} al ${f2(sun)}</div>
-  </div>
-  <div class="section-title">Por categoría</div>`;
-  CATS.filter(c=>byCat[c.id]).sort((a,b)=>(byCat[b.id]||0)-(byCat[a.id]||0)).forEach(c=>{
-    const val=byCat[c.id]||0, pct=weekTotal?(val/weekTotal*100):0;
-    html+=`<div class="cat-row"><div class="cat-row-left"><span>${c.icon}</span><span class="cat-row-label">${c.label}</span></div><div class="cat-row-bar"><div class="cat-bar-fill" style="width:${pct}%;background:${c.color}"></div></div><div class="cat-row-val">${fmt(val)}</div></div>`;
-  });
-  if(Object.keys(byUser).length){
-    html+=`<div class="section-title">Por usuario</div>`;
-    Object.entries(byUser).sort((a,b)=>b[1]-a[1]).forEach(([u,v])=>{
-      const pct=weekTotal?(v/weekTotal*100):0;
-      html+=`<div class="cat-row"><div class="cat-row-left"><span>👤</span><span class="cat-row-label">${esc(u)}</span></div><div class="cat-row-bar"><div class="cat-bar-fill" style="width:${pct}%;background:#E84B1A"></div></div><div class="cat-row-val">${fmt(v)}</div></div>`;
-    });
+// ── RESUMEN CON FILTROS ───────────────────────────
+function getFiltroDates(periodo) {
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const str = dd => dd.getFullYear()+'-'+pad(dd.getMonth()+1)+'-'+pad(dd.getDate());
+  if(periodo === 'semana') {
+    const day = d.getDay()||7;
+    const mon = new Date(d); mon.setDate(d.getDate()-day+1);
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    return { desde: str(mon), hasta: str(sun), label: str(mon)+' al '+str(sun) };
   }
+  if(periodo === 'mes') {
+    const desde = d.getFullYear()+'-'+pad(d.getMonth()+1)+'-01';
+    const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
+    return { desde, hasta: str(last), label: d.toLocaleDateString('es-CO',{month:'long',year:'numeric'}) };
+  }
+  // historico
+  const sorted = state.gastos.map(g=>g.fecha).sort();
+  const desde = sorted[0]||str(d), hasta = sorted[sorted.length-1]||str(d);
+  return { desde, hasta, label: 'Todo el histórico' };
+}
+
+function renderResumen(el) {
+  if(!state.session?.isAdmin){el.innerHTML=`<div class="locked-banner"><div class="locked-icon">🔒</div><div class="locked-text">Solo para administradores</div></div>`;return;}
+
+  const p = state.resumenPeriodo;
+  const {desde, hasta, label} = getFiltroDates(p);
+  const lista = state.gastos.filter(g=>g.fecha>=desde && g.fecha<=hasta);
+  const total = lista.reduce((s,g)=>s+g.monto,0);
+
+  const byCat={}, byUser={};
+  lista.forEach(g=>{
+    byCat[g.categoria]=(byCat[g.categoria]||0)+g.monto;
+    if(g.registradoPor) byUser[g.registradoPor]=(byUser[g.registradoPor]||0)+g.monto;
+  });
+
+  const tabs = [['semana','Semana'],['mes','Mes'],['historico','Histórico']];
+  let html = `<div class="period-tabs">
+    ${tabs.map(([k,l])=>`<button class="period-btn ${p===k?'active':''}" onclick="setPeriodo('${k}')">${l}</button>`).join('')}
+  </div>
+  <div class="summary-card">
+    <div class="summary-title">${label}</div>
+    <div class="summary-total">${fmt(total)}</div>
+    <div class="summary-sub">${lista.length} ${lista.length===1?'gasto':'gastos'}</div>
+  </div>`;
+
+  if(!lista.length) {
+    html += `<div class="empty"><div class="empty-icon">📭</div><div>Sin gastos en este período</div></div>`;
+  } else {
+    html += `<div class="section-title">Por categoría</div>`;
+    CATS.filter(c=>byCat[c.id]).sort((a,b)=>(byCat[b.id]||0)-(byCat[a.id]||0)).forEach(c=>{
+      const val=byCat[c.id]||0, pct=total?(val/total*100):0;
+      html+=`<div class="cat-row">
+        <div class="cat-row-left"><span>${c.icon}</span><span class="cat-row-label">${c.label}</span></div>
+        <div class="cat-row-bar"><div class="cat-bar-fill" style="width:${pct}%;background:${c.color}"></div></div>
+        <div class="cat-row-val">${fmt(val)}</div>
+      </div>`;
+    });
+
+    if(Object.keys(byUser).length) {
+      html += `<div class="section-title">Por usuario</div>`;
+      Object.entries(byUser).sort((a,b)=>b[1]-a[1]).forEach(([u,v])=>{
+        const pct=total?(v/total*100):0;
+        html+=`<div class="cat-row">
+          <div class="cat-row-left"><span>👤</span><span class="cat-row-label">${esc(u)}</span></div>
+          <div class="cat-row-bar"><div class="cat-bar-fill" style="width:${pct}%;background:#E84B1A"></div></div>
+          <div class="cat-row-val">${fmt(v)}</div>
+        </div>`;
+      });
+    }
+  }
+
+  const totalAll=state.gastos.reduce((s,g)=>s+g.monto,0);
   html+=`<div class="summary-card2"><div class="summary-title">Total histórico</div><div class="summary-total">${fmt(totalAll)}</div><div class="summary-sub">${state.gastos.length} gastos en total</div></div>`;
   el.innerHTML=html;
 }
 
+window.setPeriodo = function(p) {
+  state.resumenPeriodo=p;
+  renderContent();
+};
+
 window.askDelete = function(idx) {
   try {
     const g=state.gastos[idx];
-    if(!g) { alert('gasto no encontrado idx='+idx+' total='+state.gastos.length); return; }
+    if(!g){showToast('Gasto no encontrado','error');return;}
     state.deleteId=g.id;
-    const descEl = document.getElementById('modal-del-desc');
-    const modalEl = document.getElementById('modal-del');
-    if(!descEl || !modalEl) { alert('modal-del not found'); return; }
-    descEl.textContent = String(g.descripcion||'') + ' — ' + String(fmt(g.monto)||'');
-    modalEl.style.display='flex';
-  } catch(e) {
-    alert('askDelete error: ' + e.message + ' stack: ' + e.stack);
-  }
+    document.getElementById('modal-del-desc').textContent=String(g.descripcion||'')+' — '+String(fmt(g.monto)||'');
+    document.getElementById('modal-del').style.display='flex';
+  } catch(e){ showToast('Error al abrir modal','error'); }
 };
-window.closeModal = function(id) { document.getElementById(id).style.display='none'; };
+
+window.closeModal = function(id){document.getElementById(id).style.display='none';};
+
 window.confirmDelete = async function() {
   if(!state.deleteId) return;
   closeModal('modal-del');
-  try { 
-    await eliminarGasto(state.deleteId); 
-    showToast('Gasto eliminado'); 
-    await loadData(true); 
-  } catch(e) { 
-    alert('ERROR ELIMINAR:\n' + JSON.stringify({msg: e.message, code: e.code, name: e.name}));
-  }
+  try {
+    await eliminarGasto(state.deleteId);
+    state.deleteId=null;
+    showToast('Gasto eliminado');
+    await loadData(true);
+  } catch(e){showToast('Error: '+e.message,'error');}
 };
 
 window.askEdit = function(idx) {
@@ -586,44 +599,44 @@ window.askEdit = function(idx) {
   state.editId=g.id;
   document.getElementById('edit-desc').value=g.descripcion||'';
   document.getElementById('edit-persona').value=g.persona||'';
-  document.getElementById('edit-monto').value=g.monto||'';
+  const montoEditRaw=g.monto?parseInt(g.monto).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.'):'';
+  document.getElementById('edit-monto').value=montoEditRaw;
   document.getElementById('edit-fecha').value=g.fecha||todayStr();
-  const gcat = String(g.categoria||'otros'); document.getElementById('edit-cat').innerHTML=CATS.map(c=>`<option value="${c.id}" ${gcat===c.id?'selected':''}>${c.icon} ${c.label}</option>`).join('');
+  const gcat=String(g.categoria||'otros');
+  document.getElementById('edit-cat').innerHTML=CATS.map(c=>`<option value="${c.id}" ${gcat===c.id?'selected':''}>${c.icon} ${c.label}</option>`).join('');
   document.getElementById('edit-user').innerHTML=USUARIOS.map(u=>`<option value="${u}" ${g.registradoPor===u?'selected':''}>${u}</option>`).join('');
   document.getElementById('modal-edit').style.display='flex';
 };
+
 window.confirmEdit = async function() {
   try {
-    const descEl = document.getElementById('edit-desc');
-    const montoEl = document.getElementById('edit-monto');
-    const fechaEl = document.getElementById('edit-fecha');
-    const personaEl = document.getElementById('edit-persona');
-    const catEl = document.getElementById('edit-cat');
-    const userEl = document.getElementById('edit-user');
-    const desc = (descEl?.value || '').trim();
-    const monto = parseFloat(montoEl?.value || '0');
+    const desc=(document.getElementById('edit-desc')?.value||'').trim();
+    const montoRawEdit=(document.getElementById('edit-monto')?.value||'').replace(/[^0-9]/g,'');
+    const monto=parseFloat(montoRawEdit)||0;
     if(!desc) return showToast('Escribe una descripción','error');
     if(isNaN(monto)||monto<=0) return showToast('Monto inválido','error');
-    const payload = {
-      fecha: String(fechaEl?.value || ''),
-      descripcion: String(desc),
-      persona: String(personaEl?.value || '').trim(),
-      categoria: String(catEl?.value || 'otros'),
-      monto: monto,
-      registradoPor: String(userEl?.value || '')
+    const payload={
+      fecha:String(document.getElementById('edit-fecha')?.value||''),
+      descripcion:String(desc),
+      persona:String(document.getElementById('edit-persona')?.value||'').trim(),
+      categoria:String(document.getElementById('edit-cat')?.value||'otros'),
+      monto,
+      registradoPor:String(document.getElementById('edit-user')?.value||'')
     };
     closeModal('modal-edit');
     await editarGasto(state.editId, payload);
+    state.editId=null;
     showToast('Gasto actualizado ✓');
     await loadData(true);
-  } catch(e) {
-    showToast('Error: '+String(e.message||e),'error');
-  }
+  } catch(e){showToast('Error: '+String(e.message||e),'error');}
 };
 
 window.exportCSV = function() {
-  const rows=[['ID','Fecha','Descripción','Persona','Categoría','Monto','Registrado por']];
-  state.gastos.forEach(g=>rows.push([g.id,g.fecha,g.descripcion,g.persona||'',cat(g.categoria).label,g.monto,g.registradoPor||'']));
+  const rows=[['ID','Fecha','Hora','Descripción','Persona','Categoría','Monto','Registrado por']];
+  state.gastos.forEach(g=>{
+    const hora=g.timestamp?new Date(g.timestamp).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit',timeZone:'America/Bogota'}):'';
+    rows.push([g.id,g.fecha,hora,g.descripcion,g.persona||'',cat(g.categoria).label,g.monto,g.registradoPor||'']);
+  });
   const csv='\uFEFF'+rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
   const a=document.createElement('a');
   a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
@@ -631,20 +644,19 @@ window.exportCSV = function() {
   showToast('CSV descargado 📥');
 };
 
-// Format monto input - iOS compatible
-window.formatMonto = function(el) {
-  const raw = el.value.replace(/[^0-9]/g, '');
-  state.form.monto = raw;
-  if(raw) {
-    const num = parseInt(raw, 10);
-    const formatted = num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    el.value = formatted;
-  } else {
-    el.value = '';
-  }
+window.fmtEditMonto = function(el) {
+  const raw=el.value.replace(/[^0-9]/g,'');
+  if(raw){el.value=parseInt(raw,10).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
+  else{el.value='';}
 };
 
-// INIT
+window.formatMonto = function(el) {
+  const raw=el.value.replace(/[^0-9]/g,'');
+  state.form.monto=raw;
+  if(raw){el.value=parseInt(raw,10).toString().replace(/\B(?=(\d{3})+(?!\d))/g,'.');}
+  else{el.value='';}
+};
+
 render();
 if(state.session) loadData();
 </script>
